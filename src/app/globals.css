@@ -1,0 +1,227 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Variables ─────────────────────────── */
+:root {
+  --cyan:        #00FFE7;
+  --cyan-dim:    #00BFA8;
+  --cyan-glow:   rgba(0, 255, 231, 0.3);
+  --black:       #000000;
+  --dark:        #060608;
+  --card:        #0A0C10;
+  --border:      rgba(0, 255, 231, 0.2);
+  --border-hot:  rgba(0, 255, 231, 0.6);
+  --muted:       #4A5060;
+  --text:        #C8D0E0;
+}
+
+/* ── Base Reset ────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan-dim) var(--dark);
+}
+
+body {
+  background-color: var(--dark);
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* ── Scrollbar ─────────────────────────────── */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: var(--dark); }
+::-webkit-scrollbar-thumb  { background: var(--cyan-dim); border-radius: 2px; }
+
+/* ── Typography ────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Orbitron', monospace;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+}
+
+/* ── Cyberpunk Grid Background ─────────────── */
+.bg-cyber-grid {
+  background-image:
+    linear-gradient(rgba(0,255,231,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,231,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Glowing Elements ──────────────────────── */
+.glow-cyan {
+  box-shadow: 0 0 20px var(--cyan-glow), 0 0 40px rgba(0,255,231,0.1);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 10px var(--cyan), 0 0 20px var(--cyan-glow);
+}
+
+.border-glow {
+  border-color: var(--border-hot);
+  box-shadow: 0 0 10px var(--cyan-glow), inset 0 0 10px rgba(0,255,231,0.05);
+}
+
+/* ── Card Component ────────────────────────── */
+.tvcw-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.tvcw-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(0,255,231,0.04) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.tvcw-card:hover {
+  border-color: var(--border-hot);
+  box-shadow: 0 0 20px var(--cyan-glow), 0 8px 32px rgba(0,0,0,0.6);
+  transform: translateY(-4px);
+}
+
+.tvcw-card:hover::before { opacity: 1; }
+
+/* ── Cyber Button ──────────────────────────── */
+.btn-cyber {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid var(--border-hot);
+  background: transparent;
+  color: var(--cyan);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+.btn-cyber:hover {
+  background: var(--cyan);
+  color: var(--black);
+  box-shadow: 0 0 20px var(--cyan-glow);
+}
+
+.btn-cyber-solid {
+  background: var(--cyan);
+  color: var(--black);
+}
+
+.btn-cyber-solid:hover {
+  background: var(--cyan-dim);
+  box-shadow: 0 0 30px var(--cyan-glow);
+}
+
+/* ── Scan Line Effect ──────────────────────── */
+.scan-lines {
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-lines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.05) 2px,
+    rgba(0, 0, 0, 0.05) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ── Channel / Show Badge ──────────────────── */
+.cyber-badge {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border: 1px solid var(--border-hot);
+  color: var(--cyan);
+  background: rgba(0, 255, 231, 0.08);
+  text-transform: uppercase;
+}
+
+/* ── Section Divider ───────────────────────── */
+.cyber-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--cyan-dim) 20%,
+    var(--cyan) 50%,
+    var(--cyan-dim) 80%,
+    transparent 100%
+  );
+  margin: 0.5rem 0;
+}
+
+/* ── Loading Shimmer ───────────────────────── */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--card) 0%,
+    rgba(0, 255, 231, 0.05) 50%,
+    var(--card) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ── HLS Video Player Container ────────────── */
+.player-wrapper {
+  position: relative;
+  background: #000;
+  border: 1px solid var(--border-hot);
+  box-shadow: 0 0 40px var(--cyan-glow);
+}
+
+video:focus { outline: none; }
+
+/* ── Utility ───────────────────────────────── */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Hide scrollbar but keep scroll ───────── */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar { display: none; }
