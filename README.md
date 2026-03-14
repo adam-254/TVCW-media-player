@@ -1,24 +1,46 @@
-# 📡 TVCW — Stream The World
+<div align="center">
+  <img src="public/TVCW-logo.png" alt="TVCW Logo" width="80" />
+  <h1>TVCW — Stream The World</h1>
+  <p>Free live TV streaming + TV show discovery. No subscriptions. No sign-up.</p>
 
-> Free live TV streaming + TV show discovery. Built with Next.js 14, Tailwind CSS, HLS.js, IPTV-org & TMDB.
-
----
-
-## ✨ Features
-
-- 📺 **11,000+ Live TV Channels** — sourced from the open-source `iptv-org` project
-- 🎬 **TV Shows** — trending, popular, and top-rated via TMDB API
-- 🔍 **Search** — search channels and shows simultaneously
-- ▶️ **HLS Video Player** — built-in browser-based stream player
-- 🌍 **Filter by Country & Category** — find channels from any region
-- ⚡ **Next.js 14 App Router** — fast, ISR-cached pages
-- 🎨 **Cyberpunk UI** — black & cyan with scan-line effects
+  ![Next.js](https://img.shields.io/badge/Next.js_14-black?style=flat&logo=next.js)
+  ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
+  ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white)
+  ![License](https://img.shields.io/badge/license-MIT-green?style=flat)
+</div>
 
 ---
 
-## 🚀 Getting Started
+## Features
 
-### 1. Clone & Install
+- **12,000+ Live TV Channels** — sourced from the open-source `iptv-org` project, filterable by country and category
+- **TV Shows** — trending, popular, and top-rated sections via TMDB, with "Trending in Your Country" auto-detection
+- **Episode Player** — browse seasons and play episodes directly in-app via embedded sources
+- **Search** — instant search across both live channels and TV shows simultaneously
+- **HLS Player** — browser-based stream player with automatic CORS proxy fallback
+- **Cyberpunk UI** — dark theme with cyan accents, scan-line effects, and per-channel gradient cards
+- **Fully Responsive** — mobile, tablet, and large-screen layouts
+
+---
+
+## Tech Stack
+
+| | |
+|---|---|
+| Framework | Next.js 14 (App Router) |
+| Language | TypeScript |
+| Styling | Tailwind CSS |
+| Video | HLS.js |
+| Icons | Lucide React |
+| TV Data | TMDB API |
+| Channel Data | iptv-org (open source, no key) |
+| Deployment | Vercel |
+
+---
+
+## Getting Started
+
+### 1. Clone & install
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/tvcw.git
@@ -26,133 +48,58 @@ cd tvcw
 npm install
 ```
 
-### 2. Set Up Environment Variables
+### 2. Set up environment variables
 
-```bash
-cp .env.example .env.local
-```
-
-Then open `.env.local` and fill in:
+Create a `.env.local` file in the root:
 
 ```env
-TMDB_API_KEY=your_key_here
+TMDB_API_KEY=your_tmdb_key
+TMDB_BASE_URL=https://api.themoviedb.org/3
+IPTV_BASE_URL=https://iptv-org.github.io/api
 ```
 
-> Get a **free** TMDB API key at: https://www.themoviedb.org/settings/api
-> The IPTV source (`iptv-org`) requires **no key** — it's fully public.
+Get a free TMDB API key at [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api). The IPTV source requires no key.
 
-### 3. Run Development Server
+### 3. Run
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 📁 Project Structure
+## Deploying to Vercel
 
-```
-tvcw/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx                  # Home — Live TV
-│   │   ├── tv-shows/page.tsx         # TV Shows
-│   │   ├── search/page.tsx           # Search
-│   │   ├── layout.tsx                # Root layout
-│   │   ├── globals.css               # Global styles + cyberpunk theme
-│   │   └── api/
-│   │       ├── channels/
-│   │       │   ├── route.ts          # GET all channels
-│   │       │   ├── search/route.ts   # GET search channels
-│   │       │   ├── categories/route.ts
-│   │       │   └── countries/route.ts
-│   │       └── shows/
-│   │           ├── trending/route.ts
-│   │           └── search/route.ts
-│   ├── components/
-│   │   ├── layout/
-│   │   │   └── Navbar.tsx
-│   │   ├── player/
-│   │   │   └── VideoPlayer.tsx       # HLS.js player
-│   │   └── ui/
-│   │       ├── ChannelCard.tsx
-│   │       ├── ShowCard.tsx
-│   │       └── Skeleton.tsx
-│   ├── hooks/
-│   │   ├── usePlayer.ts              # Video player state
-│   │   └── useDebounce.ts            # Input debounce
-│   ├── lib/
-│   │   ├── tmdb.ts                   # TMDB API client
-│   │   ├── iptv.ts                   # IPTV-org API client + M3U parser
-│   │   └── utils.ts                  # Shared helpers
-│   └── types/
-│       └── index.ts                  # All TypeScript interfaces
-├── public/
-├── .env.example
-├── next.config.mjs
-├── tailwind.config.ts
-└── tsconfig.json
-```
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
+
+1. Push the repo to GitHub
+2. Import it in the [Vercel dashboard](https://vercel.com/new)
+3. Add your environment variables under **Settings → Environment Variables**:
+   - `TMDB_API_KEY`
+   - `TMDB_BASE_URL` → `https://api.themoviedb.org/3`
+   - `IPTV_BASE_URL` → `https://iptv-org.github.io/api`
+4. Deploy
 
 ---
 
-## 🔌 Data Sources
+## Data Sources
 
-| Source | What it provides | Cost |
-|--------|-----------------|------|
-| [iptv-org/iptv](https://github.com/iptv-org/iptv) | 11,000+ live channel M3U streams | Free / Open Source |
+| Source | Provides | Cost |
+|--------|----------|------|
+| [iptv-org/iptv](https://github.com/iptv-org/iptv) | 12,000+ live M3U streams | Free / Open Source |
 | [iptv-org API](https://github.com/iptv-org/api) | Channel metadata, logos, countries | Free / Open Source |
 | [TMDB API](https://www.themoviedb.org/documentation/api) | TV show data, posters, ratings | Free (key required) |
 
 ---
 
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 14 (App Router) |
-| Language | TypeScript |
-| Styling | Tailwind CSS |
-| Video Playback | HLS.js |
-| HTTP Client | Axios |
-| Icons | Lucide React |
-| Fonts | Orbitron, Rajdhani, Share Tech Mono |
-| Deployment | Vercel (recommended) |
-
----
-
-## 🌐 Deploying to Vercel
-
-```bash
-npm install -g vercel
-vercel
-```
-
-Add your environment variables in the Vercel dashboard under **Settings → Environment Variables**.
-
----
-
-## 📌 Roadmap / What to Build Next
-
-- [ ] Favorites / watchlist (localStorage)
-- [ ] Channel EPG (Electronic Program Guide)
-- [ ] User authentication (NextAuth.js)
-- [ ] Movie section (TMDB movies)
-- [ ] Show detail page with episode list
-- [ ] Dark/light mode toggle
-- [ ] PWA support (watch on mobile)
-- [ ] Embed YouTube trailers for shows
-
----
-
-## ⚠️ Legal Notice
+## Legal Notice
 
 TVCW does not host or store any video content. It aggregates publicly available stream URLs from the open-source `iptv-org` community project. Stream availability and legality vary by region. Use responsibly.
 
 ---
 
-## 📄 License
+## License
 
 MIT © TVCW
