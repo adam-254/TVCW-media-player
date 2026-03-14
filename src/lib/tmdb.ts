@@ -7,6 +7,9 @@ import axios from "axios";
 import type {
   TMDBPaginatedResponse,
   TMDBShow,
+  TMDBShowDetails,
+  TMDBSeason,
+  TMDBEpisode,
   TMDBMovie,
   TMDBGenre,
   SearchResponse,
