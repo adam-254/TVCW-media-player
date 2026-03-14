@@ -15,89 +15,134 @@ function proxyUrl(url: string) {
   return `/api/stream-proxy?url=${encodeURIComponent(url)}`;
 }
 
+// All strategies to try in order
+function buildStrategies(url: string) {
+  return [
+    { label: "CONNECTING...",        streamUrl: url,           useNative: false },
+    { label: "RETRYING VIA PROXY...", streamUrl: proxyUrl(url), useNative: false },
+    { label: "TRYING NATIVE...",     streamUrl: url,           useNative: true  },
+    { label: "PROXY NATIVE...",      streamUrl: proxyUrl(url), useNative: true  },
+  ];
+}
+
 export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef   = useRef<import("hls.js").default | null>(null);
+  const videoRef    = useRef<HTMLVideoElement>(null);
+  const hlsRef      = useRef<import("hls.js").default | null>(null);
+  const strategyRef = useRef(0);
 
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState<string | null>(null);
-  const [muted,    setMuted]    = useState(false);
-  const [useProxy, setUseProxy] = useState(false);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState<string | null>(null);
+  const [muted,         setMuted]         = useState(false);
+  const [statusLabel,   setStatusLabel]   = useState("CONNECTING...");
 
-  const initPlayer = useCallback(async (streamUrl: string) => {
+  const destroyHls = useCallback(() => {
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    if (videoRef.current) videoRef.current.src = "";
+  }, []);
+
+  const tryNextStrategy = useCallback(() => {
+    const strategies = buildStrategies(url);
+    strategyRef.current += 1;
+    if (strategyRef.current >= strategies.length) {
+      setError("Stream unavailable. Try again later.");
+      setLoading(false);
+      return;
+    }
+    // Small delay before next attempt
+    setTimeout(() => initPlayer(strategies[strategyRef.current]), 800);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
+
+  const initPlayer = useCallback(async (strategy: ReturnType<typeof buildStrategies>[0]) => {
     const video = videoRef.current;
     if (!video) return;
 
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-    video.src = "";
+    destroyHls();
     setLoading(true);
     setError(null);
+    setStatusLabel(strategy.label);
 
-    const isHLS = /\.m3u8/i.test(streamUrl) || streamUrl.includes("hls");
+    const { streamUrl, useNative } = strategy;
+    const isHLS = /\.m3u8/i.test(streamUrl) || /hls/i.test(streamUrl) || streamUrl.includes("stream-proxy");
 
-    if (isHLS) {
-      const Hls = (await import("hls.js")).default;
-      if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
-        hlsRef.current = hls;
-        hls.loadSource(streamUrl);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); setLoading(false); });
-        hls.on(Hls.Events.ERROR, (_e, data) => {
-          if (!data.fatal) return;
-          // MANIFEST_LOAD errors are usually CORS — proxy can help
-          // MANIFEST_LOAD_TIMEOUT / other network errors = dead server, skip proxy
-          const isCors = data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR;
-          if (!useProxy && isCors) {
-            hls.destroy(); hlsRef.current = null; setUseProxy(true);
-          } else {
-            setError("Stream unavailable. This channel may be offline.");
-            setLoading(false);
-          }
-        });
-      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = streamUrl;
-        video.onloadedmetadata = () => { video.play().catch(() => {}); setLoading(false); };
-        video.onerror = () => { setError("Stream unavailable."); setLoading(false); };
-      } else {
-        setError("Your browser does not support HLS streams.");
-        setLoading(false);
-      }
-    } else {
+    if (!isHLS || useNative) {
+      // Native video element — works for MP4, RTMP-over-HTTP, and Safari HLS
       video.src = streamUrl;
-      video.onloadeddata = () => { video.play().catch(() => {}); setLoading(false); };
-      video.onerror      = () => { setError("Unable to load stream."); setLoading(false); };
+      video.load();
+      const onLoaded = () => { video.play().catch(() => {}); setLoading(false); };
+      const onErr    = () => tryNextStrategy();
+      video.onloadedmetadata = onLoaded;
+      video.onerror          = onErr;
+      return;
     }
-  }, [useProxy]);
 
-  useEffect(() => {
-    initPlayer(useProxy ? proxyUrl(url) : url);
-    return () => {
-      hlsRef.current?.destroy();
+    // HLS.js path
+    const Hls = (await import("hls.js")).default;
+
+    if (!Hls.isSupported()) {
+      // Fallback to native (Safari)
+      video.src = streamUrl;
+      video.load();
+      video.onloadedmetadata = () => { video.play().catch(() => {}); setLoading(false); };
+      video.onerror          = () => tryNextStrategy();
+      return;
+    }
+
+    const hls = new Hls({
+      enableWorker:    true,
+      lowLatencyMode:  true,
+      backBufferLength: 30,
+      maxBufferLength:  60,
+      manifestLoadingTimeOut:  12000,
+      manifestLoadingMaxRetry: 1,
+      levelLoadingTimeOut:     12000,
+    });
+    hlsRef.current = hls;
+
+    hls.loadSource(streamUrl);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play().catch(() => {});
+      setLoading(false);
+    });
+
+    hls.on(Hls.Events.ERROR, (_e, data) => {
+      if (!data.fatal) return;
+      hls.destroy();
       hlsRef.current = null;
-      if (videoRef.current) videoRef.current.src = "";
-    };
-  }, [url, useProxy, initPlayer]);
+      tryNextStrategy();
+    });
+  }, [destroyHls, tryNextStrategy]);
 
-  const retry = () => { setUseProxy(false); setError(null); setLoading(true); };
+  // Start from strategy 0 whenever url changes
+  useEffect(() => {
+    strategyRef.current = 0;
+    const strategies = buildStrategies(url);
+    initPlayer(strategies[0]);
+    return destroyHls;
+  }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const retry = useCallback(() => {
+    strategyRef.current = 0;
+    setError(null);
+    setLoading(true);
+    initPlayer(buildStrategies(url)[0]);
+  }, [url, initPlayer]);
+
   const toggleMute = () => {
     if (videoRef.current) { videoRef.current.muted = !muted; setMuted(!muted); }
   };
   const toggleFullscreen = () => videoRef.current?.requestFullscreen().catch(() => {});
 
   return (
-    // Mobile: true full-screen. Desktop: centered overlay with padding
     <div
       className="fixed inset-0 z-[100] bg-black/95 flex flex-col sm:items-center sm:justify-center sm:p-4 sm:bg-black/90 sm:backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="
-          flex flex-col w-full h-full
-          sm:h-auto sm:max-w-5xl sm:rounded-sm sm:overflow-hidden
-          sm:animate-slide-up
-        "
+        className="flex flex-col w-full h-full sm:h-auto sm:max-w-5xl sm:rounded-sm sm:overflow-hidden sm:animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -105,11 +150,8 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
           <div className="flex items-center gap-2 min-w-0">
             {logo && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logo} alt={title}
-                className="h-6 w-auto object-contain flex-shrink-0"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
+              <img src={logo} alt={title} className="h-6 w-auto object-contain flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
             )}
             <span className="font-mono text-xs sm:text-sm text-cyber-cyan tracking-wider uppercase truncate">
               {title}
@@ -128,7 +170,7 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
           </div>
         </div>
 
-        {/* Video — fills remaining height on mobile, aspect-video on desktop */}
+        {/* Video */}
         <div className="relative bg-black flex-1 sm:flex-none sm:aspect-video">
           <video ref={videoRef} className="w-full h-full" playsInline controls={!loading && !error} />
 
@@ -136,7 +178,7 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
               <Loader2 className="w-10 h-10 text-cyber-cyan animate-spin" />
               <p className="font-mono text-cyber-cyan text-xs sm:text-sm tracking-widest animate-pulse text-center px-4">
-                {useProxy ? "RETRYING VIA PROXY..." : "CONNECTING TO STREAM..."}
+                {statusLabel}
               </p>
             </div>
           )}
@@ -146,7 +188,9 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
               <AlertTriangle className="w-10 h-10 text-red-400" />
               <p className="font-mono text-red-400 text-sm text-center max-w-xs">{error}</p>
               <div className="flex gap-2 mt-2">
-                <button onClick={retry}   className="btn-cyber text-xs flex items-center gap-1.5"><RefreshCw className="w-3 h-3" /> Retry</button>
+                <button onClick={retry} className="btn-cyber text-xs flex items-center gap-1.5">
+                  <RefreshCw className="w-3 h-3" /> Retry
+                </button>
                 <button onClick={onClose} className="btn-cyber text-xs">Close</button>
               </div>
             </div>
@@ -162,9 +206,6 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
           <span className="font-mono text-xs text-cyber-muted tracking-widest">
             {error ? "OFFLINE" : loading ? "BUFFERING" : "LIVE"}
           </span>
-          {useProxy && !error && !loading && (
-            <span className="font-mono text-xs text-cyber-muted/60 ml-auto">via proxy</span>
-          )}
         </div>
       </div>
     </div>
