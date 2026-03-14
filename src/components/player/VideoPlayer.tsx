@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Loader2, AlertTriangle, Volume2, VolumeX, Maximize2, RefreshCw } from "lucide-react";
+import { X, Loader2, AlertTriangle, Volume2, VolumeX, Maximize2, RefreshCw, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface VideoPlayerProps {
@@ -11,21 +11,22 @@ interface VideoPlayerProps {
   onClose: () => void;
 }
 
-type Stage = "direct" | "proxy" | "native" | "failed";
+const SOURCES = (url: string) => [
+  { label: "Source 1",       streamUrl: url },
+  { label: "Source 2 (Proxy)", streamUrl: `/api/stream-proxy?url=${encodeURIComponent(url)}` },
+];
 
 export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerProps) {
-  const videoRef  = useRef<HTMLVideoElement>(null);
-  const hlsRef    = useRef<import("hls.js").default | null>(null);
-  const stageRef  = useRef<Stage>("direct");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef   = useRef<import("hls.js").default | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(false);
-  const [muted,   setMuted]   = useState(false);
-  const [label,   setLabel]   = useState("CONNECTING...");
+  const [sourceIdx, setSourceIdx] = useState(0);
+  const [loading,   setLoading]   = useState(true);
+  const [failed,    setFailed]    = useState(false); // current source failed
+  const [allFailed, setAllFailed] = useState(false);
+  const [muted,     setMuted]     = useState(false);
 
-  function proxyUrl(u: string) {
-    return `/api/stream-proxy?url=${encodeURIComponent(u)}`;
-  }
+  const sources = SOURCES(url);
 
   function destroyHls() {
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
@@ -40,55 +41,44 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
     try { v.load(); } catch { /* ignore */ }
   }
 
-  async function load(stage: Stage) {
+  async function loadSource(idx: number) {
     const v = videoRef.current;
     if (!v) return;
 
-    stageRef.current = stage;
-    setLoading(true);
-    setError(false);
-
-    if (stage === "failed") {
-      setLoading(false);
-      setError(true);
-      return;
-    }
-
     resetVideo();
+    setLoading(true);
+    setFailed(false);
+    setAllFailed(false);
 
-    const streamUrl = stage === "proxy" ? proxyUrl(url) : url;
-
-    if (stage === "native") {
-      setLabel("TRYING NATIVE...");
-      v.src = streamUrl;
-      v.load();
-      v.oncanplay = () => { setLoading(false); v.play().catch(() => {}); };
-      v.onerror   = () => load("failed");
-      return;
-    }
-
-    setLabel(stage === "proxy" ? "RETRYING VIA PROXY..." : "CONNECTING...");
-
+    const { streamUrl } = sources[idx];
     const Hls = (await import("hls.js")).default;
 
     if (!Hls.isSupported()) {
-      // Safari — native HLS
+      // Safari native HLS
       v.src = streamUrl;
       v.load();
-      v.oncanplay = () => { setLoading(false); v.play().catch(() => {}); };
-      v.onerror   = () => load("failed");
+      v.oncanplay = () => {
+        setLoading(false);
+        v.muted = false;
+        v.play().catch(() => {
+          v.muted = true;
+          setMuted(true);
+          v.play().catch(() => {});
+        });
+      };
+      v.onerror   = () => { setLoading(false); setFailed(true); };
       return;
     }
 
     const hls = new Hls({
       enableWorker:            true,
       lowLatencyMode:          true,
-      manifestLoadingTimeOut:  6000,
-      manifestLoadingMaxRetry: 0,
-      levelLoadingTimeOut:     6000,
-      levelLoadingMaxRetry:    0,
-      fragLoadingTimeOut:      10000,
-      fragLoadingMaxRetry:     2,
+      manifestLoadingTimeOut:  10000,  // give it a full 10s before giving up
+      manifestLoadingMaxRetry: 1,
+      levelLoadingTimeOut:     10000,
+      levelLoadingMaxRetry:    1,
+      fragLoadingTimeOut:      15000,
+      fragLoadingMaxRetry:     3,
       startLevel:              -1,
     });
 
@@ -98,8 +88,9 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       setLoading(false);
+      v.muted = false;
       v.play().catch(() => {
-        // Autoplay blocked — mute and retry
+        // Browser blocked unmuted autoplay — force muted play, user can unmute
         v.muted = true;
         setMuted(true);
         v.play().catch(() => {});
@@ -109,24 +100,41 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
     hls.on(Hls.Events.ERROR, (_e, data) => {
       if (!data.fatal) return;
       destroyHls();
-      const next: Stage = stage === "direct" ? "proxy" : stage === "proxy" ? "native" : "failed";
-      load(next);
+      setLoading(false);
+      // Last source — mark all failed
+      if (idx >= sources.length - 1) {
+        setAllFailed(true);
+      } else {
+        setFailed(true); // show "Try next source" button
+      }
     });
   }
 
+  // Load on mount and when url changes
   useEffect(() => {
-    load("direct");
-    return () => { resetVideo(); };
+    setSourceIdx(0);
+    loadSource(0);
+    return resetVideo;
   }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const retry = () => load("direct");
+  const tryNext = () => {
+    const next = sourceIdx + 1;
+    setSourceIdx(next);
+    loadSource(next);
+  };
+
+  const retry = () => loadSource(sourceIdx);
+
   const toggleMute = () => {
     const v = videoRef.current;
     if (!v) return;
     v.muted = !muted;
     setMuted(!muted);
   };
+
   const toggleFullscreen = () => videoRef.current?.requestFullscreen().catch(() => {});
+
+  const hasNext = sourceIdx < sources.length - 1;
 
   return (
     <div
@@ -148,6 +156,11 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
             <span className="font-mono text-xs sm:text-sm text-cyber-cyan tracking-wider uppercase truncate">
               {title}
             </span>
+            {!loading && !failed && !allFailed && (
+              <span className="font-mono text-[10px] text-cyber-muted/50 hidden sm:inline">
+                — {sources[sourceIdx].label}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button onClick={toggleMute} className="p-2 text-cyber-muted hover:text-cyber-cyan transition-colors">
@@ -164,22 +177,53 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
 
         {/* Video */}
         <div className="relative bg-black flex-1 sm:flex-none sm:aspect-video">
-          <video ref={videoRef} className="w-full h-full" playsInline controls={!loading && !error} />
+          <video ref={videoRef} className="w-full h-full" playsInline
+            controls={!loading && !failed && !allFailed} />
 
+          {/* Loading */}
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70">
               <Loader2 className="w-10 h-10 text-cyber-cyan animate-spin" />
-              <p className="font-mono text-cyber-cyan text-xs tracking-widest animate-pulse">{label}</p>
+              <p className="font-mono text-cyber-cyan text-xs tracking-widest animate-pulse">
+                LOADING {sources[sourceIdx].label.toUpperCase()}...
+              </p>
             </div>
           )}
 
-          {error && (
+          {/* Current source failed — let user decide */}
+          {failed && !allFailed && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 px-6 text-center">
+              <AlertTriangle className="w-8 h-8 text-yellow-400" />
+              <div>
+                <p className="font-mono text-white text-sm font-semibold mb-1">
+                  {sources[sourceIdx].label} failed
+                </p>
+                <p className="text-cyber-muted text-xs max-w-xs">
+                  {hasNext ? "Try the next source or retry this one." : "No more sources available."}
+                </p>
+              </div>
+              <div className="flex gap-2 flex-wrap justify-center">
+                <button onClick={retry} className="btn-cyber text-xs flex items-center gap-1.5">
+                  <RefreshCw className="w-3 h-3" /> Retry
+                </button>
+                {hasNext && (
+                  <button onClick={tryNext} className="btn-cyber text-xs flex items-center gap-1.5">
+                    <ChevronRight className="w-3 h-3" /> Try {sources[sourceIdx + 1].label}
+                  </button>
+                )}
+                <button onClick={onClose} className="btn-cyber text-xs">Close</button>
+              </div>
+            </div>
+          )}
+
+          {/* All sources exhausted */}
+          {allFailed && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 px-6 text-center">
               <AlertTriangle className="w-10 h-10 text-yellow-400" />
               <div>
                 <p className="font-mono text-white text-sm font-semibold mb-1">Channel Unavailable</p>
                 <p className="text-cyber-muted text-xs max-w-xs leading-relaxed">
-                  This stream is offline. Try another channel or retry.
+                  All sources failed. This channel may be offline.
                 </p>
               </div>
               <div className="flex gap-2">
@@ -195,13 +239,15 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
         {/* Footer */}
         <div className="px-3 py-2 sm:px-4 bg-cyber-card border-t border-cyber-border/20 flex items-center gap-2 flex-shrink-0">
           <span className="relative flex h-2 w-2">
-            <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", error ? "bg-yellow-400" : "bg-cyber-cyan")} />
-            <span className={cn("relative inline-flex rounded-full h-2 w-2", error ? "bg-yellow-400" : "bg-cyber-cyan")} />
+            <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+              allFailed ? "bg-yellow-400" : "bg-cyber-cyan")} />
+            <span className={cn("relative inline-flex rounded-full h-2 w-2",
+              allFailed ? "bg-yellow-400" : "bg-cyber-cyan")} />
           </span>
           <span className="font-mono text-xs text-cyber-muted tracking-widest">
-            {error ? "UNAVAILABLE" : loading ? "BUFFERING" : "LIVE"}
+            {allFailed ? "UNAVAILABLE" : loading ? "BUFFERING" : failed ? "SOURCE FAILED" : "LIVE"}
           </span>
-          {muted && !error && !loading && (
+          {muted && !failed && !allFailed && !loading && (
             <button onClick={toggleMute}
               className="ml-auto font-mono text-[10px] text-cyber-muted/50 hover:text-cyber-cyan tracking-widest transition-colors flex items-center gap-1">
               <VolumeX className="w-3 h-3" /> MUTED · TAP TO UNMUTE
