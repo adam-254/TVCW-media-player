@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { X, Loader2, AlertTriangle, Volume2, VolumeX, Maximize2, RefreshCw, Play } from "lucide-react";
+import { X, Loader2, AlertTriangle, Volume2, VolumeX, Maximize2, RefreshCw, Play, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface VideoPlayerProps {
@@ -20,9 +20,9 @@ const HLS_CONFIG = {
   lowLatencyMode:          true,
   backBufferLength:        20,
   maxBufferLength:         40,
-  manifestLoadingTimeOut:  4000,
+  manifestLoadingTimeOut:  5000,
   manifestLoadingMaxRetry: 0,
-  levelLoadingTimeOut:     4000,
+  levelLoadingTimeOut:     5000,
   levelLoadingMaxRetry:    0,
   fragLoadingTimeOut:      8000,
   fragLoadingMaxRetry:     2,
@@ -30,11 +30,11 @@ const HLS_CONFIG = {
 };
 
 export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerProps) {
-  const videoRef    = useRef<HTMLVideoElement>(null);
-  const hlsRef      = useRef<import("hls.js").default | null>(null);
-  const mountedRef  = useRef(true);
-  // tracks which attempt "won" the race so the loser is ignored
-  const winnerRef   = useRef<string | null>(null);
+  const videoRef   = useRef<HTMLVideoElement>(null);
+  const hlsRef     = useRef<import("hls.js").default | null>(null);
+  const mountedRef = useRef(true);
+  const wonRef     = useRef(false);
+  const failsRef   = useRef(0);
 
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState<string | null>(null);
@@ -42,49 +42,34 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
   const [blocked,     setBlocked]     = useState(false);
   const [statusLabel, setStatusLabel] = useState("CONNECTING...");
 
-  // ── destroy HLS instance only, don't touch video.src ──────────────────────
   const destroyHls = useCallback(() => {
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
   }, []);
 
-  // ── full reset of video element ────────────────────────────────────────────
   const resetVideo = useCallback(() => {
     destroyHls();
     const v = videoRef.current;
     if (!v) return;
-    v.oncanplay        = null;
-    v.onloadedmetadata = null;
-    v.onerror          = null;
+    v.oncanplay = null; v.onerror = null;
     v.pause();
     v.removeAttribute("src");
     try { v.load(); } catch { /* ignore */ }
   }, [destroyHls]);
 
-  // ── play without muting ────────────────────────────────────────────────────
+  // Play unmuted, fall back to muted if browser policy blocks it
   const doPlay = useCallback((video: HTMLVideoElement, onFail: () => void) => {
     video.muted = false;
     video.play()
       .then(() => {
         if (!mountedRef.current) return;
-        setLoading(false);
-        setBlocked(false);
-        setMuted(false);
+        setLoading(false); setBlocked(false); setMuted(false);
       })
       .catch((err: DOMException) => {
         if (!mountedRef.current) return;
         if (err?.name === "NotAllowedError") {
-          // Browser blocked unmuted autoplay — mute and retry once
-          video.muted = true;
-          setMuted(true);
+          video.muted = true; setMuted(true);
           video.play()
-            .then(() => {
-              if (!mountedRef.current) return;
-              setLoading(false);
-              setBlocked(true); // show "tap to unmute"
-            })
+            .then(() => { if (mountedRef.current) { setLoading(false); setBlocked(true); } })
             .catch(() => onFail());
         } else {
           onFail();
@@ -92,14 +77,36 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
       });
   }, []);
 
-  // ── start playback: race direct vs proxy ──────────────────────────────────
+  const showError = useCallback(() => {
+    if (!mountedRef.current) return;
+    setError("This channel is currently offline or unavailable.");
+    setLoading(false);
+  }, []);
+
+  // Called when a strategy wins the race
+  const onWin = useCallback((hls: import("hls.js").default, label: string) => {
+    if (wonRef.current || !mountedRef.current) { hls.destroy(); return; }
+    wonRef.current = true;
+    hlsRef.current = hls;
+    setStatusLabel(label);
+    const video = videoRef.current!;
+    doPlay(video, showError);
+  }, [doPlay, showError]);
+
+  // Called when a strategy fails
+  const onFail = useCallback((hls: import("hls.js").default | null) => {
+    hls?.destroy();
+    if (wonRef.current || !mountedRef.current) return;
+    failsRef.current++;
+    if (failsRef.current >= 2) showError(); // both direct + proxy failed
+  }, [showError]);
+
   const startPlayback = useCallback(async (streamUrl: string) => {
     if (!mountedRef.current) return;
     resetVideo();
-    winnerRef.current = null;
-    setLoading(true);
-    setError(null);
-    setBlocked(false);
+    wonRef.current  = false;
+    failsRef.current = 0;
+    setLoading(true); setError(null); setBlocked(false);
     setStatusLabel("CONNECTING...");
 
     const video = videoRef.current;
@@ -108,134 +115,79 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
     const Hls = (await import("hls.js")).default;
     if (!mountedRef.current) return;
 
-    // If HLS.js not supported (Safari), go native directly
+    // Safari — native HLS only
     if (!Hls.isSupported()) {
-      video.src = streamUrl;
-      video.load();
-      video.oncanplay = () => {
-        if (!mountedRef.current) return;
-        doPlay(video, () => {
-          setError("Stream unavailable.");
-          setLoading(false);
-        });
-      };
-      video.onerror = () => {
-        if (!mountedRef.current) return;
-        setError("Stream unavailable.");
-        setLoading(false);
-      };
+      video.src = streamUrl; video.load();
+      video.oncanplay = () => { if (mountedRef.current) doPlay(video, showError); };
+      video.onerror   = () => { if (mountedRef.current) showError(); };
       return;
     }
 
-    // Race: direct HLS.js vs proxied HLS.js
-    // Whichever fires MANIFEST_PARSED first wins; the other is destroyed
-    let directHls: import("hls.js").default | null = null;
-    let proxyHls:  import("hls.js").default | null = null;
-    let failCount = 0;
-
-    const onWin = (winner: "direct" | "proxy", hls: import("hls.js").default) => {
-      if (winnerRef.current || !mountedRef.current) {
-        hls.destroy();
-        return;
-      }
-      winnerRef.current = winner;
-
-      // Destroy the loser
-      if (winner === "direct") { proxyHls?.destroy();  proxyHls  = null; }
-      else                     { directHls?.destroy(); directHls = null; }
-
-      // Attach the winner to the video element
-      hlsRef.current = hls;
+    // Race direct vs proxy — correct HLS.js order: attachMedia → loadSource
+    const makeHls = (src: string, label: string) => {
+      const hls = new Hls(HLS_CONFIG);
+      // Attach first, then load — this is the correct order per HLS.js docs
       hls.attachMedia(video);
-      hls.once(Hls.Events.MEDIA_ATTACHED, () => {
-        if (!mountedRef.current) return;
-        setStatusLabel(winner === "proxy" ? "VIA PROXY" : "LIVE");
-        doPlay(video, () => {
-          // play() failed — try native as last resort
-          setStatusLabel("TRYING NATIVE...");
-          destroyHls();
-          video.src = streamUrl;
-          video.load();
-          video.oncanplay = () => {
-            if (!mountedRef.current) return;
-            doPlay(video, () => {
-              setError("Stream unavailable. The channel may be offline.");
-              setLoading(false);
-            });
-          };
-          video.onerror = () => {
-            if (!mountedRef.current) return;
-            setError("Stream unavailable. The channel may be offline.");
-            setLoading(false);
-          };
-        });
+      hls.loadSource(src);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => onWin(hls, label));
+      hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) onFail(hls); });
+      return hls;
+    };
+
+    // We can't attach two HLS instances to the same video element simultaneously.
+    // So: try direct first with a short head-start, then start proxy in parallel.
+    const directHls = makeHls(streamUrl, "LIVE");
+
+    // Give direct 1.5s head-start before starting proxy (avoids src conflicts)
+    const proxyTimer = setTimeout(() => {
+      if (wonRef.current || !mountedRef.current) return;
+      // Detach direct temporarily, race with proxy
+      // Actually: just start proxy loading without attaching — check manifest only
+      const proxyCheck = new Hls(HLS_CONFIG);
+      proxyCheck.loadSource(proxyUrl(streamUrl));
+      proxyCheck.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (wonRef.current || !mountedRef.current) { proxyCheck.destroy(); return; }
+        // Proxy manifest loaded — switch to it
+        directHls.destroy();
+        wonRef.current = true;
+        hlsRef.current = proxyCheck;
+        proxyCheck.attachMedia(video);
+        setStatusLabel("VIA PROXY");
+        doPlay(video, showError);
       });
-    };
+      proxyCheck.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) onFail(proxyCheck); });
+    }, 1500);
 
-    const onFail = () => {
-      if (winnerRef.current || !mountedRef.current) return;
-      failCount++;
-      if (failCount < 2) return; // wait for both to fail
-      // Both HLS attempts failed — try native <video>
-      setStatusLabel("TRYING NATIVE...");
-      video.src = streamUrl;
-      video.load();
-      video.oncanplay = () => {
-        if (!mountedRef.current) return;
-        doPlay(video, () => {
-          setError("Stream unavailable. The channel may be offline.");
-          setLoading(false);
-        });
-      };
-      video.onerror = () => {
-        if (!mountedRef.current) return;
-        setError("Stream unavailable. The channel may be offline.");
-        setLoading(false);
-      };
-    };
+    // If direct wins before proxy timer fires, cancel it
+    const origOnWin = onWin;
+    void origOnWin; // used via closure above
 
-    // Create both HLS instances — do NOT attachMedia yet (avoids src conflicts)
-    directHls = new Hls(HLS_CONFIG);
-    proxyHls  = new Hls(HLS_CONFIG);
-
-    directHls.loadSource(streamUrl);
-    proxyHls.loadSource(proxyUrl(streamUrl));
-
-    directHls.on(Hls.Events.MANIFEST_PARSED, () => onWin("direct", directHls!));
-    proxyHls.on( Hls.Events.MANIFEST_PARSED, () => onWin("proxy",  proxyHls!));
-
-    directHls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) { directHls?.destroy(); directHls = null; onFail(); } });
-    proxyHls.on( Hls.Events.ERROR, (_e, d) => { if (d.fatal) { proxyHls?.destroy();  proxyHls  = null; onFail(); } });
-
-  }, [resetVideo, doPlay, destroyHls]);
+    return () => clearTimeout(proxyTimer);
+  }, [resetVideo, doPlay, showError, onWin, onFail]);
 
   useEffect(() => {
     mountedRef.current = true;
-    startPlayback(url);
+    const cleanup = startPlayback(url);
     return () => {
       mountedRef.current = false;
       resetVideo();
+      cleanup?.then?.(fn => fn?.());
     };
   }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const retry = useCallback(() => {
-    startPlayback(url);
-  }, [url, startPlayback]);
+  const retry = useCallback(() => startPlayback(url), [url, startPlayback]);
 
   const unblockPlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.muted = false;
-    setMuted(false);
-    setBlocked(false);
+    v.muted = false; setMuted(false); setBlocked(false);
     v.play().catch(() => {});
   }, []);
 
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.muted = !muted;
-    setMuted(!muted);
+    v.muted = !muted; setMuted(!muted);
   }, [muted]);
 
   const toggleFullscreen = () => videoRef.current?.requestFullscreen().catch(() => {});
@@ -276,28 +228,19 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
 
         {/* Video */}
         <div className="relative bg-black flex-1 sm:flex-none sm:aspect-video">
-          <video
-            ref={videoRef}
-            className="w-full h-full"
-            playsInline
-            controls={!loading && !error && !blocked}
-          />
+          <video ref={videoRef} className="w-full h-full" playsInline
+            controls={!loading && !error && !blocked} />
 
           {loading && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70">
               <Loader2 className="w-10 h-10 text-cyber-cyan animate-spin" />
-              <p className="font-mono text-cyber-cyan text-xs tracking-widest animate-pulse">
-                {statusLabel}
-              </p>
+              <p className="font-mono text-cyber-cyan text-xs tracking-widest animate-pulse">{statusLabel}</p>
             </div>
           )}
 
-          {/* Tap to unmute overlay */}
           {blocked && !error && !loading && (
-            <div
-              className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/40 cursor-pointer"
-              onClick={unblockPlay}
-            >
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/40 cursor-pointer"
+              onClick={unblockPlay}>
               <div className="rounded-full bg-cyber-cyan/20 border border-cyber-cyan/40 p-5 hover:bg-cyber-cyan/30 transition-colors">
                 <Play className="w-10 h-10 text-cyber-cyan fill-cyber-cyan" />
               </div>
@@ -306,14 +249,21 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
           )}
 
           {error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 px-4">
-              <AlertTriangle className="w-10 h-10 text-red-400" />
-              <p className="font-mono text-red-400 text-sm text-center max-w-xs">{error}</p>
-              <div className="flex gap-2 mt-2">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 px-6 text-center">
+              <AlertTriangle className="w-10 h-10 text-yellow-400" />
+              <div>
+                <p className="font-mono text-white text-sm font-semibold mb-1">Channel Unavailable</p>
+                <p className="text-cyber-muted text-xs max-w-xs leading-relaxed">
+                  This stream is currently offline. Try another channel or retry in a moment.
+                </p>
+              </div>
+              <div className="flex gap-2 mt-1">
                 <button onClick={retry} className="btn-cyber text-xs flex items-center gap-1.5">
                   <RefreshCw className="w-3 h-3" /> Retry
                 </button>
-                <button onClick={onClose} className="btn-cyber text-xs">Close</button>
+                <button onClick={onClose} className="btn-cyber text-xs flex items-center gap-1.5">
+                  <SkipForward className="w-3 h-3" /> Try Another
+                </button>
               </div>
             </div>
           )}
@@ -322,11 +272,11 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
         {/* Footer */}
         <div className="px-3 py-2 sm:px-4 bg-cyber-card border-t border-cyber-border/20 flex items-center gap-2 flex-shrink-0">
           <span className="relative flex h-2 w-2">
-            <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", error ? "bg-red-400" : "bg-cyber-cyan")} />
-            <span className={cn("relative inline-flex rounded-full h-2 w-2", error ? "bg-red-400" : "bg-cyber-cyan")} />
+            <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", error ? "bg-yellow-400" : "bg-cyber-cyan")} />
+            <span className={cn("relative inline-flex rounded-full h-2 w-2", error ? "bg-yellow-400" : "bg-cyber-cyan")} />
           </span>
           <span className="font-mono text-xs text-cyber-muted tracking-widest">
-            {error ? "OFFLINE" : loading ? "BUFFERING" : "LIVE"}
+            {error ? "UNAVAILABLE" : loading ? "BUFFERING" : blocked ? "PAUSED" : "LIVE"}
           </span>
           {muted && !error && !loading && (
             <button onClick={toggleMute}
