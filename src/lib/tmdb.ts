@@ -17,9 +17,14 @@ import type {
 
 const tmdb = axios.create({
   baseURL: process.env.TMDB_BASE_URL || "https://api.themoviedb.org/3",
+  params: {
+    api_key: process.env.TMDB_API_KEY,
+  },
   headers: {
-    Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`,
-    'Content-Type': 'application/json;charset=utf-8'
+    ...(process.env.TMDB_ACCESS_TOKEN
+      ? { Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}` }
+      : {}),
+    "Content-Type": "application/json;charset=utf-8",
   },
 });
 
