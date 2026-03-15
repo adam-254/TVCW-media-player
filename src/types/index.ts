@@ -138,7 +138,24 @@ export interface SearchResponse {
   total_results: number;
 }
 
-// ── UI State ─────────────────────────────────
+// ── Radio Browser ────────────────────────────
+export interface RadioStation {
+  stationuuid: string;
+  name:        string;
+  url_resolved: string;
+  favicon:     string;
+  tags:        string;
+  country:     string;
+  countrycode: string;
+  language:    string;
+  codec:       string;
+  bitrate:     number;
+  votes:       number;
+  clickcount:  number;
+  lastcheckok: number;
+}
+
+
 export type ActiveSection = "live-tv" | "tv-shows" | "search";
 
 export interface PlayerState {

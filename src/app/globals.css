@@ -225,3 +225,9 @@ video:focus { outline: none; }
   scrollbar-width: none;
 }
 .scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* ── Radio visualizer bar animation ───────── */
+@keyframes barPulse {
+  from { transform: scaleY(0.3); }
+  to   { transform: scaleY(1);   }
+}

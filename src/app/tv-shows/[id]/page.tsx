@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import Navbar from "@/components/layout/Navbar";
+import EpisodePlayer from "@/components/player/EpisodePlayer";
 import { tmdbImage, TMDB_BACKDROP_SIZE, TMDB_POSTER_SIZE } from "@/lib/tmdb";
 import { formatYear, formatRating } from "@/lib/utils";
-import { ArrowLeft, Star, Calendar, Clock, X, Play } from "lucide-react";
-import type { TMDBShowDetails, TMDBSeason, TMDBEpisode } from "@/types";
+import { ArrowLeft, Star, Calendar, Clock, Play } from "lucide-react";import type { TMDBShowDetails, TMDBSeason, TMDBEpisode } from "@/types";
 
 export default function ShowDetailsPage() {
   const params = useParams();
@@ -19,8 +19,6 @@ export default function ShowDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [episodesLoading, setEpisodesLoading] = useState(false);
   const [playingEpisode, setPlayingEpisode] = useState<TMDBEpisode | null>(null);
-  const [playerStarted, setPlayerStarted] = useState(false);
-  const [sourceIndex, setSourceIndex] = useState(0);
 
   // Fetch show details
   useEffect(() => {
@@ -69,25 +67,14 @@ export default function ShowDetailsPage() {
     fetchEpisodes();
   }, [showId, selectedSeason, show]);
 
-  // Close player on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPlayingEpisode(null);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  // Close player on Escape key — handled inside EpisodePlayer now
 
   const handleEpisodeClick = (episode: TMDBEpisode) => {
     setPlayingEpisode(episode);
-    setPlayerStarted(false);
-    setSourceIndex(0);
   };
 
   const closePlayer = () => {
     setPlayingEpisode(null);
-    setPlayerStarted(false);
-    setSourceIndex(0);
   };
 
   // Embed sources in priority order — all support TMDB IDs and allow iframing
@@ -129,120 +116,15 @@ export default function ShowDetailsPage() {
     <div className="min-h-screen bg-cyber-dark bg-cyber-grid bg-grid">
       <Navbar />
 
-      {/* Player Modal */}
+      {/* Episode Player Modal */}
       {playingEpisode && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center bg-black/95 sm:bg-black/90 sm:backdrop-blur-sm sm:p-4"
-          onClick={closePlayer}
-        >
-          <div
-            className="flex flex-col w-full h-full sm:h-auto sm:max-w-5xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between bg-cyber-card border-b border-cyber-border/40 sm:border sm:border-b-0 sm:rounded-t-lg px-3 py-2.5 sm:px-4 sm:py-3 flex-shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <Play className="w-4 h-4 text-cyber-cyan flex-shrink-0" />
-                <span className="text-white font-semibold text-xs sm:text-sm truncate">
-                  {show.name}
-                  <span className="text-cyber-muted font-normal ml-1 hidden sm:inline">
-                    S{String(playingEpisode.season_number).padStart(2, "0")}E
-                    {String(playingEpisode.episode_number).padStart(2, "0")} — {playingEpisode.name}
-                  </span>
-                </span>
-              </div>
-              <button
-                onClick={closePlayer}
-                className="text-cyber-muted hover:text-white transition-colors p-1.5 rounded flex-shrink-0"
-                aria-label="Close player"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Episode label on mobile (hidden on desktop, shown in header) */}
-            <div className="sm:hidden px-3 py-1.5 bg-cyber-card/80 border-b border-cyber-border/20 flex-shrink-0">
-              <p className="text-cyber-muted text-xs font-mono truncate">
-                S{String(playingEpisode.season_number).padStart(2, "0")}E
-                {String(playingEpisode.episode_number).padStart(2, "0")} — {playingEpisode.name}
-              </p>
-            </div>
-
-            {/* Player area — fills height on mobile, aspect-video on desktop */}
-            <div className="relative flex-1 sm:flex-none sm:aspect-video bg-black sm:border sm:border-cyber-border/40 sm:border-t-0 sm:rounded-b-lg overflow-hidden">
-              {playerStarted ? (
-                <iframe
-                  key={`${playingEpisode.season_number}-${playingEpisode.episode_number}-${sourceIndex}`}
-                  src={embedSources(playingEpisode)[sourceIndex]}
-                  className="absolute inset-0 w-full h-full"
-                  allowFullScreen
-                  allow="autoplay; fullscreen; picture-in-picture"
-                  referrerPolicy="origin"
-                  title={`${show.name} S${playingEpisode.season_number}E${playingEpisode.episode_number}`}
-                />
-              ) : (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  {playingEpisode.still_path ? (
-                    <Image
-                      src={tmdbImage(playingEpisode.still_path, "w780")}
-                      alt={playingEpisode.name}
-                      fill
-                      className="object-cover opacity-50"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 bg-gradient-to-br from-cyber-card to-cyber-dark" />
-                  )}
-                  <div className="absolute inset-0 bg-black/40" />
-                  <div className="relative z-10 flex flex-col items-center gap-4 px-6 text-center">
-                    <button
-                      onClick={() => setPlayerStarted(true)}
-                      className="w-16 h-16 rounded-full bg-cyber-cyan/20 border-2 border-cyber-cyan flex items-center justify-center hover:bg-cyber-cyan/40 transition-colors"
-                      aria-label="Play episode"
-                    >
-                      <Play className="w-7 h-7 text-cyber-cyan fill-cyber-cyan ml-1" />
-                    </button>
-                    <div>
-                      <p className="text-white font-semibold text-sm sm:text-base">
-                        {playingEpisode.episode_number}. {playingEpisode.name}
-                      </p>
-                      {playingEpisode.overview && (
-                        <p className="text-cyber-muted text-xs sm:text-sm mt-1 max-w-lg line-clamp-2">
-                          {playingEpisode.overview}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-center gap-3 mt-2 text-xs text-cyber-muted">
-                        {playingEpisode.runtime && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />{playingEpisode.runtime}m
-                          </span>
-                        )}
-                        {playingEpisode.vote_average > 0 && (
-                          <span className="flex items-center gap-1">
-                            <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                            {formatRating(playingEpisode.vote_average)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-3 py-2 sm:px-0 sm:mt-3 bg-cyber-card sm:bg-transparent border-t border-cyber-border/20 sm:border-0 flex-shrink-0 text-xs text-cyber-muted">
-              <span className="hidden sm:inline">
-                Press <kbd className="bg-cyber-card border border-cyber-border/40 px-1.5 py-0.5 rounded font-mono">Esc</kbd> or click outside to close
-              </span>
-              <span className="sm:hidden font-mono tracking-widest">TAP OUTSIDE TO CLOSE</span>
-              {playerStarted && sourceIndex < embedSources(playingEpisode).length - 1 && (
-                <button onClick={() => setSourceIndex((i) => i + 1)} className="text-cyber-cyan hover:underline">
-                  Try next source →
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <EpisodePlayer
+          episode={playingEpisode}
+          showId={showId}
+          showName={show.name}
+          sources={embedSources(playingEpisode)}
+          onClose={closePlayer}
+        />
       )}
 
       {/* Hero Section */}

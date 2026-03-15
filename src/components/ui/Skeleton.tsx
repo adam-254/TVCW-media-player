@@ -1,9 +1,9 @@
-export function CardSkeleton({ aspect = "video" }: { aspect?: "video" | "poster" }) {
+export function CardSkeleton({ aspect = "video" }: { aspect?: "video" | "poster" | "square" }) {
   return (
     <div className="tvcw-card overflow-hidden animate-pulse">
       <div
         className={`shimmer bg-cyber-gray ${
-          aspect === "poster" ? "aspect-[2/3]" : "aspect-video"
+          aspect === "poster" ? "aspect-[2/3]" : aspect === "square" ? "aspect-square" : "aspect-video"
         }`}
       />
       <div className="p-3 flex flex-col gap-2">
@@ -19,7 +19,7 @@ export function GridSkeleton({
   aspect,
 }: {
   count?: number;
-  aspect?: "video" | "poster";
+  aspect?: "video" | "poster" | "square";
 }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
