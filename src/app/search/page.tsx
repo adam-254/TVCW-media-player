@@ -4,74 +4,73 @@ import { useState, useEffect } from "react";
 import Navbar from "@/components/layout/Navbar";
 import ChannelCard from "@/components/ui/ChannelCard";
 import ShowCard from "@/components/ui/ShowCard";
+import RadioCard from "@/components/ui/RadioCard";
 import VideoPlayer from "@/components/player/VideoPlayer";
+import RadioPlayer from "@/components/player/RadioPlayer";
 import { GridSkeleton } from "@/components/ui/Skeleton";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useDebounce } from "@/hooks/useDebounce";
-import { Search, Radio, Tv2, X } from "lucide-react";
-import type { Channel, TMDBShow } from "@/types";
+import { Search, Radio, Tv2, X, Music2 } from "lucide-react";
+import type { Channel, TMDBShow, RadioStation } from "@/types";
 
-type Tab = "all" | "channels" | "shows";
+type Tab = "all" | "channels" | "shows" | "radio";
 
 export default function SearchPage() {
-  const [query,    setQuery]    = useState("");
-  const [tab,      setTab]      = useState<Tab>("all");
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [shows,    setShows]    = useState<TMDBShow[]>([]);
-  const [loading,  setLoading]  = useState(false);
-  const [channelsLoading, setChannelsLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [query,          setQuery]          = useState("");
+  const [tab,            setTab]            = useState<Tab>("all");
+  const [channels,       setChannels]       = useState<Channel[]>([]);
+  const [shows,          setShows]          = useState<TMDBShow[]>([]);
+  const [radioStations,  setRadioStations]  = useState<RadioStation[]>([]);
+  const [loading,        setLoading]        = useState(false);
+  const [channelsLoading,setChannelsLoading]= useState(false);
+  const [radioLoading,   setRadioLoading]   = useState(false);
+  const [searched,       setSearched]       = useState(false);
+  const [activeStation,  setActiveStation]  = useState<RadioStation | null>(null);
 
-  const debouncedQuery         = useDebounce(query, 500);
+  const debouncedQuery = useDebounce(query, 500);
   const { player, playChannel, closePlayer } = usePlayer();
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {
-      setChannels([]);
-      setShows([]);
-      setSearched(false);
-      setLoading(false);
-      setChannelsLoading(false);
+      setChannels([]); setShows([]); setRadioStations([]);
+      setSearched(false); setLoading(false);
+      setChannelsLoading(false); setRadioLoading(false);
       return;
     }
 
     async function doSearch() {
-      setLoading(true);
-      setChannelsLoading(true);
+      setLoading(true); setChannelsLoading(true); setRadioLoading(true);
       setSearched(true);
       try {
-        // Kick off both in parallel; show TV shows as soon as they arrive
         const showPromise = fetch(`/api/shows/search?q=${encodeURIComponent(debouncedQuery)}`)
-          .then((r) => r.json())
-          .then((sh) => {
-            setShows(sh.results ?? []);
-            setLoading(false);
-          });
+          .then(r => r.json())
+          .then(sh => { setShows(sh.results ?? []); setLoading(false); });
 
         const channelPromise = fetch(`/api/channels/search?q=${encodeURIComponent(debouncedQuery)}`)
-          .then((r) => r.json())
-          .then((ch) => {
-            setChannels(Array.isArray(ch) ? ch : []);
-            setChannelsLoading(false);
-          });
+          .then(r => r.json())
+          .then(ch => { setChannels(Array.isArray(ch) ? ch : []); setChannelsLoading(false); });
 
-        await Promise.all([showPromise, channelPromise]);
+        const radioPromise = fetch(`/api/radio?q=${encodeURIComponent(debouncedQuery)}&limit=24`)
+          .then(r => r.json())
+          .then(rd => { setRadioStations(rd.results ?? []); setRadioLoading(false); });
+
+        await Promise.all([showPromise, channelPromise, radioPromise]);
       } catch (err) {
         console.error("Search error:", err);
-        setLoading(false);
-        setChannelsLoading(false);
+        setLoading(false); setChannelsLoading(false); setRadioLoading(false);
       }
     }
 
     doSearch();
   }, [debouncedQuery]);
 
-  const totalResults = channels.length + shows.length;
+  const totalResults = channels.length + shows.length + radioStations.length;
 
   const TABS: { id: Tab; label: string; icon: React.ElementType; count: number }[] = [
-    { id: "all",      label: "All",      icon: Search, count: totalResults   },
-    { id: "channels", label: "Live TV",  icon: Radio,  count: channels.length },
-    { id: "shows",    label: "TV Shows", icon: Tv2,    count: shows.length    },
+    { id: "all",      label: "All",       icon: Search, count: totalResults        },
+    { id: "channels", label: "Live TV",   icon: Radio,  count: channels.length     },
+    { id: "radio",    label: "Radio",     icon: Music2, count: radioStations.length },
+    { id: "shows",    label: "TV Shows",  icon: Tv2,    count: shows.length         },
   ];
 
   return (
@@ -90,14 +89,13 @@ export default function SearchPage() {
               FIND YOUR <span className="text-cyber-cyan text-glow-cyan">SIGNAL</span>
             </h1>
 
-            {/* Search input */}
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-cyber-muted" />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search channels, shows..."
+                placeholder="Search channels, radio, shows..."
                 autoFocus
                 className="w-full bg-cyber-card border border-cyber-border/60 focus:border-cyber-cyan text-white placeholder-cyber-muted
                            font-body text-base pl-10 pr-10 py-3 sm:py-4 rounded-sm outline-none transition-all
@@ -119,7 +117,7 @@ export default function SearchPage() {
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8">
 
-        {/* Tabs (only shown after search) */}
+        {/* Tabs */}
         {searched && !loading && (
           <div className="flex items-center gap-1 mb-8 border-b border-cyber-border/30 pb-1 overflow-x-auto scrollbar-none">
             {TABS.map(({ id, label, icon: Icon, count }) => (
@@ -146,7 +144,7 @@ export default function SearchPage() {
         {loading && <GridSkeleton count={12} />}
 
         {/* No results */}
-        {!loading && !channelsLoading && searched && totalResults === 0 && (
+        {!loading && !channelsLoading && !radioLoading && searched && totalResults === 0 && (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <div className="w-16 h-16 border-2 border-cyber-border/30 rounded-full flex items-center justify-center">
               <Search className="w-8 h-8 text-cyber-muted" />
@@ -160,7 +158,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Empty state (before search) */}
+        {/* Empty state */}
         {!loading && !searched && (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <div className="w-16 h-16 border border-cyber-border/30 rounded-full flex items-center justify-center animate-pulse-cyan">
@@ -170,9 +168,9 @@ export default function SearchPage() {
               Awaiting signal...
             </p>
             <p className="font-body text-cyber-muted/60 text-sm text-center max-w-xs">
-              Search across {" "}
-              <span className="text-cyber-cyan">11,000+ live channels</span>{" "}
-              and thousands of TV shows
+              Search across{" "}
+              <span className="text-cyber-cyan">11,000+ live channels</span>,{" "}
+              radio stations, and thousands of TV shows
             </p>
           </div>
         )}
@@ -181,19 +179,16 @@ export default function SearchPage() {
         {searched && totalResults > 0 && (
           <div className="space-y-12">
 
-            {/* Channel results */}
+            {/* Live TV */}
             {(tab === "all" || tab === "channels") && (
               <section>
                 <div className="flex items-center gap-3 mb-6">
                   <Radio className="w-5 h-5 text-cyber-cyan" />
-                  <h2 className="font-display text-lg font-bold text-white tracking-wider">
-                    Live Channels
-                  </h2>
-                  {channelsLoading ? (
-                    <span className="cyber-badge animate-pulse">searching...</span>
-                  ) : (
-                    <span className="cyber-badge">{channels.length}</span>
-                  )}
+                  <h2 className="font-display text-lg font-bold text-white tracking-wider">Live Channels</h2>
+                  {channelsLoading
+                    ? <span className="cyber-badge animate-pulse">searching...</span>
+                    : <span className="cyber-badge">{channels.length}</span>
+                  }
                   <div className="flex-1 h-px bg-cyber-border/30" />
                 </div>
                 {channelsLoading ? (
@@ -210,14 +205,38 @@ export default function SearchPage() {
               </section>
             )}
 
-            {/* Show results */}
+            {/* Radio */}
+            {(tab === "all" || tab === "radio") && (
+              <section>
+                <div className="flex items-center gap-3 mb-6">
+                  <Music2 className="w-5 h-5 text-cyber-cyan" />
+                  <h2 className="font-display text-lg font-bold text-white tracking-wider">Radio Stations</h2>
+                  {radioLoading
+                    ? <span className="cyber-badge animate-pulse">searching...</span>
+                    : <span className="cyber-badge">{radioStations.length}</span>
+                  }
+                  <div className="flex-1 h-px bg-cyber-border/30" />
+                </div>
+                {radioLoading ? (
+                  <GridSkeleton count={6} />
+                ) : radioStations.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                    {radioStations.slice(0, tab === "all" ? 12 : radioStations.length).map((st) => (
+                      <RadioCard key={st.stationuuid} station={st} onPlay={setActiveStation} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-cyber-muted text-sm">No radio stations found.</p>
+                )}
+              </section>
+            )}
+
+            {/* TV Shows */}
             {(tab === "all" || tab === "shows") && shows.length > 0 && (
               <section>
                 <div className="flex items-center gap-3 mb-6">
                   <Tv2 className="w-5 h-5 text-cyber-cyan" />
-                  <h2 className="font-display text-lg font-bold text-white tracking-wider">
-                    TV Shows
-                  </h2>
+                  <h2 className="font-display text-lg font-bold text-white tracking-wider">TV Shows</h2>
                   <span className="cyber-badge">{shows.length}</span>
                   <div className="flex-1 h-px bg-cyber-border/30" />
                 </div>
@@ -228,6 +247,7 @@ export default function SearchPage() {
                 </div>
               </section>
             )}
+
           </div>
         )}
       </main>
@@ -238,6 +258,13 @@ export default function SearchPage() {
           title={player.title || ""}
           logo={player.logo}
           onClose={closePlayer}
+        />
+      )}
+
+      {activeStation && (
+        <RadioPlayer
+          station={activeStation}
+          onClose={() => setActiveStation(null)}
         />
       )}
     </div>
