@@ -5,7 +5,7 @@ export const revalidate = 1800;
 
 export async function GET(req: NextRequest) {
   const page     = Math.max(1, Number(req.nextUrl.searchParams.get("page")  ?? "1"));
-  const limit    = Math.min(120, Number(req.nextUrl.searchParams.get("limit") ?? "120"));
+  const limit    = Math.min(500, Number(req.nextUrl.searchParams.get("limit") ?? "120"));
   const category = req.nextUrl.searchParams.get("category") ?? "";
   const country  = req.nextUrl.searchParams.get("country")  ?? "";
 

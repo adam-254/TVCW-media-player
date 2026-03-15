@@ -28,7 +28,8 @@ export default function LiveTVPage() {
   const fetchChannels = useCallback(async (cat: string, country: string, pg: number, append = false) => {
     if (pg === 1) setLoading(true); else setLoadingMore(true);
     try {
-      const params = new URLSearchParams({ page: String(pg), limit: "120" });
+      const limit = country && country !== "all" ? "500" : "120";
+      const params = new URLSearchParams({ page: String(pg), limit });
       if (cat     && cat     !== "all") params.set("category", cat);
       if (country && country !== "all") params.set("country",  country);
 
