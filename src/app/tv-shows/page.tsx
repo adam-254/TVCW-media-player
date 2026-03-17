@@ -133,43 +133,43 @@ export default function TVShowsPage() {
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8 space-y-14">
 
         {/* Trending in your country */}
-        {countryCode && (
-          <section>
-              <div className="flex items-center gap-2 sm:gap-3 mb-6 flex-wrap">
-              <MapPin className="w-5 h-5 text-cyber-cyan flex-shrink-0" />
-              <h2 className="font-display text-base sm:text-lg font-bold text-white tracking-wider">
-                Trending in {countryName}
-              </h2>
-              {!localSection.loading && (
+        <section className="min-h-[320px]">
+          <div className="flex items-center gap-2 sm:gap-3 mb-6 flex-wrap">
+            <MapPin className="w-5 h-5 text-cyber-cyan flex-shrink-0" />
+            <h2 className="font-display text-base sm:text-lg font-bold text-white tracking-wider">
+              {countryName ? `Trending in ${countryName}` : "Trending Near You"}
+            </h2>
+            <div className="h-5 min-w-[2rem]">
+              {!localSection.loading && countryCode && (
                 <span className="cyber-badge font-mono">{localSection.shows.length}</span>
               )}
-              <div className="flex-1 h-px bg-cyber-border/30 hidden sm:block" />
             </div>
+            <div className="flex-1 h-px bg-cyber-border/30 hidden sm:block" />
+          </div>
 
-            {localSection.loading ? (
-              <GridSkeleton count={20} />
-            ) : (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
-                  {localSection.shows.map((show) => (
-                    <ShowCard key={`local-${show.id}`} show={show} />
-                  ))}
+          {localSection.loading ? (
+            <GridSkeleton count={20} aspect="poster" />
+          ) : localSection.shows.length > 0 ? (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
+                {localSection.shows.map((show) => (
+                  <ShowCard key={`local-${show.id}`} show={show} />
+                ))}
+              </div>
+              {localSection.page < localSection.totalPages && (
+                <div className="flex justify-center mt-8">
+                  <button
+                    onClick={() => fetchLocalPage(countryCode!, localSection.page + 1)}
+                    disabled={localSection.loadingMore}
+                    className="btn-cyber flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {localSection.loadingMore ? "Loading..." : <><ChevronDown className="w-4 h-4" />Show More</>}
+                  </button>
                 </div>
-                {localSection.page < localSection.totalPages && (
-                  <div className="flex justify-center mt-8">
-                    <button
-                      onClick={() => fetchLocalPage(countryCode, localSection.page + 1)}
-                      disabled={localSection.loadingMore}
-                      className="btn-cyber flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {localSection.loadingMore ? "Loading..." : <><ChevronDown className="w-4 h-4" />Show More</>}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-        )}
+              )}
+            </>
+          ) : null}
+        </section>
 
         {/* Global sections */}
         {BASE_SECTIONS.map(({ key, title, icon: Icon, endpoint }) => {
@@ -183,14 +183,16 @@ export default function TVShowsPage() {
                 <h2 className="font-display text-base sm:text-lg font-bold text-white tracking-wider">
                   {title}
                 </h2>
-                {!s.loading && (
-                  <span className="cyber-badge font-mono">{s.shows.length}</span>
-                )}
+                <div className="h-5 min-w-[2rem]">
+                  {!s.loading && (
+                    <span className="cyber-badge font-mono">{s.shows.length}</span>
+                  )}
+                </div>
                 <div className="flex-1 h-px bg-cyber-border/30 hidden sm:block" />
               </div>
 
               {s.loading ? (
-                <GridSkeleton count={20} />
+                <GridSkeleton count={20} aspect="poster" />
               ) : (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
