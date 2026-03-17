@@ -60,6 +60,20 @@ export default function EpisodePlayer({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // ── Lock orientation to landscape on mobile ───────────────────────────────
+  useEffect(() => {
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (o: string) => Promise<void>;
+    };
+    if (orientation?.lock) {
+      orientation.lock("landscape").catch(() => {/* not supported or already landscape */});
+    }
+    return () => {
+      if (orientation?.unlock) orientation.unlock();
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
   const hasNext = srcIdx < sources.length - 1;
 
   return (
@@ -82,7 +96,7 @@ export default function EpisodePlayer({
       `}</style>
 
       {/* Backdrop — no onClick so clicking outside does nothing */}
-      <div className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center sm:p-4 lg:p-8 2xl:p-12"
+      <div className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center sm:p-4 lg:p-8 2xl:p-12"
         style={{ background: "rgba(0,0,0,0.92)", backdropFilter: "blur(20px)" }}>
 
         {/*
@@ -136,7 +150,19 @@ export default function EpisodePlayer({
                 <div className="relative z-10 flex flex-col items-center gap-5 px-6 text-center max-w-2xl 2xl:max-w-3xl">
                   {/* Play button */}
                   <button
-                    onClick={() => setStarted(true)}
+                    onClick={() => {
+                      setStarted(true);
+                      // Request fullscreen + landscape on mobile when play is tapped
+                      const el = containerRef.current;
+                      if (el && !document.fullscreenElement) {
+                        el.requestFullscreen().catch(() => {}).then(() => {
+                          const orientation = screen.orientation as ScreenOrientation & {
+                            lock?: (o: string) => Promise<void>;
+                          };
+                          orientation?.lock?.("landscape").catch(() => {});
+                        });
+                      }
+                    }}
                     className="w-16 h-16 lg:w-20 lg:h-20 2xl:w-24 2xl:h-24 rounded-full bg-white/15 border-2 border-white/60 flex items-center justify-center hover:bg-white/25 hover:border-white transition-all"
                     aria-label="Play episode"
                   >

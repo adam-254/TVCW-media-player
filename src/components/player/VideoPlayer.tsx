@@ -58,6 +58,25 @@ export default function VideoPlayer({ url, title, logo, onClose }: VideoPlayerPr
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
+  // ── Lock orientation to landscape on mobile ───────────────────────────────
+  useEffect(() => {
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (o: string) => Promise<void>;
+    };
+    const el = containerRef.current;
+    if (el && !document.fullscreenElement) {
+      el.requestFullscreen().catch(() => {}).then(() => {
+        orientation?.lock?.("landscape").catch(() => {});
+      });
+    } else {
+      orientation?.lock?.("landscape").catch(() => {});
+    }
+    return () => {
+      orientation?.unlock?.();
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
   // ── HLS loading ───────────────────────────────────────────────────────────
   function destroyHls() {
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
