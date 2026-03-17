@@ -94,7 +94,7 @@ export default function LiveTVPage() {
               STREAM THE <span className="text-cyber-cyan text-glow-cyan">WORLD</span>
             </h1>
             <p className="font-body text-cyber-text text-lg max-w-xl mx-auto">
-              {total > 0 ? `${total.toLocaleString()}+` : "10,000+"} free live TV channels from every corner of the planet.
+              10,000+ free live TV channels from every corner of the planet.
               No subscriptions. No fees.
             </p>
           </div>
@@ -105,7 +105,7 @@ export default function LiveTVPage() {
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8">
 
         {/* Filters */}
-        <div className="flex flex-col gap-3 mb-8">
+        <div className="flex flex-col gap-3 mb-8 min-h-[72px]">
           {/* Category filter — horizontally scrollable on mobile */}
           <div className="flex items-center gap-2 min-w-0">
             <Filter className="w-4 h-4 text-cyber-muted flex-shrink-0" />
@@ -139,7 +139,7 @@ export default function LiveTVPage() {
         </div>
 
         {/* Stats */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-6 h-5">
           <Radio className="w-4 h-4 text-cyber-cyan" />
           <span className="font-mono text-xs text-cyber-muted tracking-widest uppercase">
             Showing {channels.length.toLocaleString()} of {total.toLocaleString()} channels
